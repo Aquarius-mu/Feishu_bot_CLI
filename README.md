@@ -1,3 +1,12 @@
+# Feishu_bot_CLI
+Claude Code + Feishu_bot_CLI  GamePlayAgent
+- 部署在远程linux终端/开发机器上面的Claude Code 对话助手  
+- 接入飞书，借助飞书机器人，使用流式卡片，可以帮你审阅提取案子关键信息，艾特人员询问，帮你整理案子思路。  
+- 使用缓存，保留对话session上下文记录，执行更加迅速准确。  
+- 借助Harness Engineering执行平时gm指令发送，查看日志，发送服务器，查看服务器状态操作。解放双手，辅助策划、qa、运营更加了解项目。
+
+在飞书群里 @ Bot，即可与 Claude 对话，支持调用 lark-cli 操作飞书（发消息、读文档、查表格、搜用户等）。                                                                       
+                                                                                                                                                                               
 ## 架构                                                                                                                                                                      
                                                                                                                                                                             
 飞书群消息                                                                                                                                                                   
@@ -117,4 +126,6 @@ tail -f ~/feishu_bot/bot.log
                                                             
 - MCP_CONFIG 需包含 lark-cli 相关 MCP server 配置，Claude 才能调用飞书工具                                                                                                   
 - Bot 使用 --dangerously-skip-permissions 启动 Claude，请确保运行环境安全，不要在公网服务器上直接暴露
-- Skill 自动改进功能会在对话结束后异步调用 Claude，不影响响应速度，日志写入 skill_improve.log    
+- Skill 自动改进功能会在对话结束后异步调用 Claude，不影响响应速度，日志写入 skill_improve.log      
+
+
