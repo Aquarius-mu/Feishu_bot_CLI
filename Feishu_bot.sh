@@ -1,6 +1,6 @@
 #!/bin/bash
 # ══════════════════════════════════════════════════════════
-#  飞书 Claude Bot — lark-cli 1.0.7
+#  飞书 Claude Bot — lark-cli 1.0.7 优化版（含群上下文注入）
 # ══════════════════════════════════════════════════════════
 
 LARK=/home/jiadongsun/nodejs/node22.15/bin/lark-cli
@@ -585,86 +585,6 @@ ${answer:0:600}
 }
 
 # ══════════════════════════════════════════════════════════
-#  旧 cache.json 迁移（一次性，幂等）
-# ══════════════════════════════════════════════════════════
-
-migrate_old_cache() {
-  local old="$BOT_DIR/cache.json"
-  [[ ! -f "$old" ]] && return
-  log "迁移 cache.json → cache/ ..."
-  local now; now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-
-  # 初始化 JSON 文件（不存在时）
-  [[ ! -f "$CACHE_DIR/tokens.json" ]] && \
-    echo '{"spreadsheets":{},"bitables":{},"wikis":{}}' > "$CACHE_DIR/tokens.json"
-  [[ ! -f "$CACHE_DIR/groups.json" ]] && echo '{}' > "$CACHE_DIR/groups.json"
-  [[ ! -f "$CACHE_DIR/users.json" ]]  && echo '{}' > "$CACHE_DIR/users.json"
-
-  # 迁移 spreadsheet_token
-  local sp_token; sp_token=$(jq -r '.spreadsheet_token // empty' "$old" 2>/dev/null)
-  if [[ -n "$sp_token" ]]; then
-    local sp_name; sp_name=$(jq -r '.spreadsheet_name // "MLA配置确认表"' "$old" 2>/dev/null)
-    (
-      flock -x 200
-      local cur; cur=$(cat "$CACHE_DIR/tokens.json")
-      echo "$cur" | jq \
-        --arg t "$sp_token" --arg n "$sp_name" --arg ts "$now" \
-        '.spreadsheets[$t] = {"name":$n,"updated_at":$ts}' \
-        > "$CACHE_DIR/tokens.json.tmp" \
-      && mv "$CACHE_DIR/tokens.json.tmp" "$CACHE_DIR/tokens.json"
-    ) 200>"$CACHE_DIR/tokens.lock"
-  fi
-
-  # 迁移 bitable tokens（格式：{"654":{"base_token":"...","table_id":"..."}}）
-  jq -r 'to_entries[] | select(.value.base_token?) |
-    "\(.key)|\(.value.base_token)|\(.value.table_id // "")"' \
-    "$old" 2>/dev/null | while IFS='|' read -r ver base_t table_t; do
-    [[ -z "$base_t" ]] && continue
-    (
-      flock -x 200
-      local cur; cur=$(cat "$CACHE_DIR/tokens.json")
-      local tables="{}"; [[ -n "$table_t" ]] && tables="{\"$table_t\":\"$ver\"}"
-      echo "$cur" | jq \
-        --arg t "$base_t" --arg n "版本${ver}" --argjson tb "$tables" --arg ts "$now" \
-        '.bitables[$t] = {"name":$n,"tables":$tb,"updated_at":$ts}' \
-        > "$CACHE_DIR/tokens.json.tmp" \
-      && mv "$CACHE_DIR/tokens.json.tmp" "$CACHE_DIR/tokens.json"
-    ) 200>"$CACHE_DIR/tokens.lock"
-  done
-
-  # 迁移 wiki_token
-  local wiki_token; wiki_token=$(jq -r '.wiki_token // empty' "$old" 2>/dev/null)
-  if [[ -n "$wiki_token" ]]; then
-    (
-      flock -x 200
-      local cur; cur=$(cat "$CACHE_DIR/tokens.json")
-      echo "$cur" | jq \
-        --arg t "$wiki_token" --arg ts "$now" \
-        '.wikis[$t] = {"name":"MLA知识库节点","updated_at":$ts}' \
-        > "$CACHE_DIR/tokens.json.tmp" \
-      && mv "$CACHE_DIR/tokens.json.tmp" "$CACHE_DIR/tokens.json"
-    ) 200>"$CACHE_DIR/tokens.lock"
-  fi
-
-  # 迁移 open_id → users.json
-  jq -r 'to_entries[] | select(.key | startswith("ou_")) | "\(.key)|\(.value)"' \
-    "$old" 2>/dev/null | while IFS='|' read -r oid name; do
-    [[ -z "$oid" ]] && continue
-    _write_users_json "$oid" "$name"
-  done
-
-  # 迁移 chat_id → groups.json
-  jq -r 'to_entries[] | select(.key | startswith("oc_")) | "\(.key)|\(.value)"' \
-    "$old" 2>/dev/null | while IFS='|' read -r cid name; do
-    [[ -z "$cid" ]] && continue
-    _write_groups_json "$cid" "$name"
-  done
-
-  mv "$old" "${old}.migrated"
-  log "cache.json 迁移完成 → cache.json.migrated"
-}
-
-# ══════════════════════════════════════════════════════════
 #  事件主循环
 # ══════════════════════════════════════════════════════════
 
@@ -677,7 +597,6 @@ event_loop() {
 
   log "启动监听 (PID $$)"
   build_warmup_session &
-  migrate_old_cache &
 
   declare -A processed_ids
 
