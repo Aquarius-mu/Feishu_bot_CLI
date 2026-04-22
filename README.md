@@ -1,197 +1,361 @@
-# 🤖 Feishu_bot_CLI · Claude Code GamePlay Agent
-
-> 部署在开发机上的 Claude Code 飞书对话助手，专为游戏项目策划 / QA / 运营设计。
-
-![Platform](https://img.shields.io/badge/platform-Linux-blue)
-![Shell](https://img.shields.io/badge/shell-bash-green)
-![Claude](https://img.shields.io/badge/powered%20by-Claude%20Code-orange)
-![lark-cli](https://img.shields.io/badge/lark--cli-%E2%89%A51.0.7-brightgreen)
-
+---
+name: feishu-lark-cli
+version: 1.0.0
+description: "飞书 lark-cli 操作完整指南：消息/文档/表格/群组/用户/日历/任务，内嵌所有关键规则和典型流程。"
+metadata:
+  requires:
+    bins: ["lark-cli", "jq", "python3"]
+  cliHelp: "lark-cli --help"
 ---
 
-## ✨ 能做什么
+# feishu-lark-cli
 
-| | 能力 | 描述 |
-|--|------|------|
-| 🗂️ | **案子协作** | @ Bot 审阅需求、整理思路、@相关人员跟进 |
-| 🎮 | **游戏后台运维** | 自然语言发 GM 指令、批量操作区服、跨区拷贝角色 |
-| 📨 | **飞书全场景操作** | 发消息、读文档/多维表格、搜用户，全程 lark-cli |
-| 🃏 | **富卡片回复** | schema 2.0 全组件（表格、折叠面板、多列布局、@提及） |
+## 0. 使用前必读规则
 
----
-
-## 🏗️ 架构
-
-```
-飞书群消息（@ Bot）
-  │
-  ├─ lark-cli event +subscribe     # 事件监听
-  │
-  ├─ lark_sweet_bot.sh             # 会话管理 / 并发优化 / 卡片构建
-  │    ├─ 预建 Session 池  ──── 消除冷启动延迟
-  │    ├─ 群隔离 Session   ──── 每个群独立上下文
-  │    ├─ 思考态占位卡片   ──── 先发占位，完成后原地更新
-  │    ├─ CARD_JSON:: 协议 ──── Claude 直出卡片 JSON，跳过文本转换
-  │    └─ 超长自动折叠     ──── >1500 字自动 collapsible_panel
-  │
-  ├─ Claude Code CLI --resume      # 带上下文持续调用
-  │    └─ Skills × 4  ──── feishu-lark-cli / feishu-card / feishu-cache / feishu-file-ops
-  │
-  └─ lark-cli im +messages-send    # 卡片回复
+### lark-cli 路径
+```bash
+LARK=/home/jiadongsun/nodejs/node22.15/bin/lark-cli
+# 或直接用 lark-cli（已在 PATH）
 ```
 
----
-
-## 🔌 Skills
-
-| Skill | 职责 |
-|-------|------|
-| `feishu-lark-cli` | lark-cli 完整操作指南 + 所有避坑规则 |
-| `feishu-card` | schema 2.0 卡片构建、流式态、原地更新、@提及 |
-| `feishu-cache` | 缓存读写，并发安全，TTL 管理 |
-| `feishu-file-ops` | 文件操作白名单，防误写敏感路径 |
-
-> 对话结束后异步触发 `trigger_skill_improve`，Claude 自主优化 Skill 文件。
-
----
-
-## 🎮 GM Server — 游戏后台 MCP
-
-内置 MCP 服务，Claude 直接通过自然语言操作游戏后台，无需登录 GM 页面。
-
-| 工具 | 说明 |
+### 身份选择
+| 场景 | 身份 |
 |------|------|
-| `list_zones` | 查询区服列表（5 分钟缓存，支持关键词过滤） |
-| `search_gm_commands` | 搜索 GM 指令，支持中英文，最多返回 20 条 |
-| `send_gm_command` | 向指定区服发送单条 GM 指令 |
-| `batch_send_gm_command` | 并发批量发送，最多 100 区，并发上限 20 |
-| `copy_role` | 跨区拷贝角色（支持 dev / and / ali / cnf / cnt） |
+| 发消息到群/私聊 | `--as bot`（+messages-send **必须** bot） |
+| 搜索群、搜索用户、读文档 | `--as user` |
+| 获取群成员、读日历、创建任务 | `--as user` |
+| 回复消息 | `--as bot` |
 
-**配置** `~/.claude/mcp-servers/gm_server/config.json`：
-
-```json
-{
-  "base_url": "http://your-gm-backend/",
-  "token": "your_token",
-  "nick": "your_nick",
-  "gm_cmd_js_path": "/path/to/gmweb/webback/js/gm_cmd.js"
-}
-```
-
-> `token` 与 `username/password` 二选一；配置 `gm_cmd_js_path` 后支持中英文指令搜索。
-
----
-
-## 🃏 飞书卡片速查（schema 2.0）
-
-**支持组件**
-
-`div` · `markdown` · `img` · `table` · `hr` · `column_set` · `collapsible_panel` · `button` · `input` · `select_static`
-
-**@提及语法**
-
-```
-卡片 lark_md  →  <at id="ou_xxx">姓名</at>
-文本消息      →  <at user_id="ou_xxx">姓名</at>
-```
-
-**颜色枚举**：格式 `{色}-{层级}`，如 `blue-100`、`green-200`、`orange-50`、`grey`
-> ⚠️ 禁用无后缀色名（`"blue"` 报错 11310）；不支持 RGBA
-
-**Emoji**：`:DONE:` `:OK:` `:WAITING:` `:ERROR:` `:FIRE:` `:ROCKET:` `:THUMBSUP:` `:GIFT:` …
-Unicode 🎉 ✅ ❌ ⚠️ 🚀 可直接写在标题和 lark_md 中
-
-> ⚠️ `note` tag 在 schema 2.0 已移除（报错 200861）
-> 替代方案：`{"tag":"div","text":{"tag":"lark_md","content":"<font color=grey>备注</font>"}}`
-
----
-
-## ⚡ lark-cli 常用命令
-
+### 不熟悉命令时，先查 schema
 ```bash
-# 搜群 / 搜用户
-lark-cli im +chat-search --query "群名" --as user
-lark-cli contact +search-user --query "姓名" --as user
+lark-cli schema im.messages.create
+lark-cli schema contact.users.get
+```
 
-# 获取群成员
+### path 参数用 --params
+```bash
+# 正确
 lark-cli im chat.members get --params '{"chat_id":"oc_xxx"}' --as user --page-all
-
-# 读知识库节点
-lark-cli wiki spaces get_node --params '{"token":"wiki_token"}' --as user
-
-# 导出表格（只能用相对路径）
-lark-cli sheets +export --spreadsheet-token xxx --file-extension xlsx --output-path ./out.xlsx
+# 错误 ❌
+lark-cli im chat.members get --chat-id oc_xxx
 ```
 
-> ⚠️ 构建卡片 JSON **必须用 heredoc**，`$(python3 -c "...")` 遇反引号会崩：
+---
 
+## 1. @提及格式（关键，不同消息类型不同语法）
+
+| 消息类型 | @语法 | 示例 |
+|---------|-------|------|
+| 卡片 `interactive` lark_md | `<at id="ou_xxx">姓名</at>` | `<at id="ou_abc">张三</at>` |
+| 文本 `text` | `<at user_id="ou_xxx">姓名</at>` | `<at user_id="ou_abc">张三</at>` |
+| `--text "姓名"` | 纯文本无@效果 ❌ | — |
+
+### @全体
+```python
+# 卡片 lark_md
+"<at id=\"all\">所有人</at>"
+# 文本
+'{"text": "<at user_id=\"all\">所有人</at> 内容"}'
+```
+
+---
+
+## 2. 消息操作
+
+### 发文本消息
 ```bash
-CARD=$(python3 - <<'PYEOF'
+CONTENT=$(python3 -c "import json; print(json.dumps({'text': '消息内容'}))")
+lark-cli im +messages-send \
+  --chat-id oc_xxx \
+  --msg-type text \
+  --content "$CONTENT" \
+  --as bot
+```
+
+### 发卡片消息（interactive）
+```bash
+CARD=$(python3 -c "
 import json
-card = {"schema":"2.0","header":{"title":{"tag":"plain_text","content":"标题"},"template":"blue"},"body":{"elements":[]}}
+card = {
+  'schema': '2.0',
+  'header': {'title': {'tag': 'plain_text', 'content': '标题'}, 'template': 'blue'},
+  'config': {'streaming_mode': False},
+  'body': {'elements': [
+    {'tag': 'markdown', 'content': '内容'}
+  ]}
+}
 print(json.dumps(card))
-PYEOF
-)
+")
+lark-cli im +messages-send \
+  --chat-id oc_xxx \
+  --msg-type interactive \
+  --content "$CARD" \
+  --as bot
+```
+
+### 发卡片并@指定人
+```bash
+CARD=$(python3 -c "
+import json
+card = {
+  'schema': '2.0',
+  'header': {'title': {'tag': 'plain_text', 'content': '【通知】'}, 'template': 'green'},
+  'body': {'elements': [
+    {'tag': 'markdown', 'content': '<at id=\"ou_aaa\">张三</at> <at id=\"ou_bbb\">李四</at>\n请查收～'}
+  ]}
+}
+print(json.dumps(card))
+")
 lark-cli im +messages-send --chat-id oc_xxx --msg-type interactive --content "$CARD" --as bot
 ```
 
----
-
-## 🚀 安装
-
+### 回复消息
 ```bash
-# 1. 克隆仓库
-git clone <repo_url> && cd <repo>
-
-# 2. 安装 lark-cli
-npm install -g @larksuiteoapi/lark-cli
-
-# 3. 两个身份都要登录
-lark-cli auth login --as user
-lark-cli auth login --as bot
-
-# 4. 安装 Claude Code CLI → https://github.com/anthropics/claude-code
-
-# 5. 安装 Skills
-cp -r skills/feishu-* ~/.claude/skills/
+CONTENT=$(python3 -c "import json; print(json.dumps({'text': '回复内容'}))")
+lark-cli im +messages-reply \
+  --message-id om_xxx \
+  --msg-type text \
+  --content "$CONTENT" \
+  --as bot
 ```
 
-**编辑 `lark_sweet_bot.sh` 顶部变量：**
-
+### 发私聊（按 open_id）
 ```bash
-LARK=/path/to/lark-cli
-BOT_OPEN_ID=ou_xxx        # 机器人 open_id（飞书开放平台查看）
-ALLOWED_SENDER=ou_xxx     # 允许使用的用户 open_id
-MCP_CONFIG=/path/to/.claude/mcp.json
-```
-
-**飞书应用权限**（开放平台配置）：
-
-```
-im:message  ·  im:chat  ·  contact:user.base:readonly
-wiki:wiki:readonly（可选）  ·  sheets:spreadsheet:readonly（可选）  ·  bitable:app:readonly（可选）
-订阅事件：im.message.receive_v1
+lark-cli im +messages-send \
+  --user-id ou_xxx \
+  --msg-type text \
+  --content '{"text":"私聊内容"}' \
+  --as bot
 ```
 
 ---
 
-## 🖥️ 启动与管理
+## 3. 文档/知识库操作
 
+### 搜索知识库
 ```bash
-./lark_sweet_bot.sh start      # 后台启动
-./lark_sweet_bot.sh status     # 查看状态
-./lark_sweet_bot.sh stop       # 停止
-./lark_sweet_bot.sh restart    # 重启
-tail -f ~/feishu_bot/bot.log   # 实时日志
+lark-cli wiki +search --query "关键词" --as user
 ```
 
-**群内指令**：`@ Bot + 消息` 对话 · `/clear` 清除上下文 · `/help` 帮助
+### 获取知识库节点信息（解析 obj_token）
+```bash
+# wiki URL: /wiki/{node_token}
+lark-cli wiki spaces get_node \
+  --params '{"token":"IU9ywLNvEi5WLDkEehAc0alwn5b"}' \
+  --as user
+# 返回 obj_token（即 spreadsheet_token 或 docx_token）
+```
+
+### 读飞书文档内容
+```bash
+lark-cli doc +content --document-token xxx --as user
+```
 
 ---
 
-## ⚠️ 注意事项
+## 4. 表格/多维表格操作
 
-- Bot 使用 `--dangerously-skip-permissions` 启动 Claude，**请勿在公网直接暴露**
-- `ALLOWED_SENDER` 白名单外的用户收到「权限不足」提示卡片
-- Skill 自动改进异步执行，不影响响应速度，日志写入 `~/feishu_bot/skill_improve.log`
-- `MCP_CONFIG` 须包含 `gm-server` 配置，Claude 才能调用 GM 工具
+### 读 Spreadsheet sheet 列表
+```bash
+lark-cli sheets +info --spreadsheet-token xxx --as user
+```
+
+### 读 Spreadsheet 单元格
+```bash
+lark-cli sheets +read \
+  --spreadsheet-token xxx \
+  --sheet-id yyy \
+  --range "A1:Z100" \
+  --as user
+```
+
+### ⚠️ bitable 嵌入 spreadsheet 时的完整流程（三步，不可跳）
+
+**Step 1**：获取 metainfo（找 blockToken）
+```bash
+lark-cli api GET /open-apis/sheets/v2/spreadsheets/{spreadsheetToken}/metainfo --as user
+# 返回各 sheet 的 blockInfo.blockToken，格式：{base_token}_{table_id}
+```
+
+**Step 2**：解析 blockToken
+```
+BvXLbhpxPaybGNsfCTucV6VfnDb_tblshNr3dE1oWqU0
+→ base_token = BvXLbhpxPaybGNsfCTucV6VfnDb
+→ table_id   = tblshNr3dE1oWqU0
+```
+
+**Step 3**：读 bitable 记录
+```bash
+lark-cli base +record-list \
+  --base-token BvXLbhpxPaybGNsfCTucV6VfnDb \
+  --table-id tblshNr3dE1oWqU0 \
+  --limit 100 \
+  --as user
+```
+
+**禁止走的错误路径：**
+```bash
+lark-cli base +table-list --base-token {spreadsheet_token}  # ❌ 91402 NOTEXIST
+lark-cli sheets +read --sheet-id {bitable_sheet_id}         # ❌ sheetId not found
+lark-cli base +record-list --base-token {sheet_id}          # ❌ 91402 NOTEXIST
+```
+
+### record-list 返回结构
+```json
+{
+  "data": {
+    "fields": ["字段名1", "字段名2"],
+    "data": [["值1", "值2"], ["值1", "值2"]],
+    "has_more": false
+  }
+}
+```
+多字段时不传 `--field-id`（它只支持单个字段），拿全量本地提取。
+
+### 写 bitable 记录
+```bash
+lark-cli base records create \
+  --params '{"app_token":"xxx","table_id":"tblyyy"}' \
+  --data '{"fields":{"字段名":"值"}}' \
+  --as user
+```
+
+---
+
+## 5. 群组操作
+
+### 搜索群（查 chat_id）
+```bash
+lark-cli im +chat-search --query "群名关键词" --as user
+```
+
+### 获取群详情
+```bash
+lark-cli im +chats-get --chat-id oc_xxx --as bot
+```
+
+### 获取群成员列表（open_id + 姓名）
+```bash
+lark-cli im chat.members get \
+  --params '{"chat_id":"oc_xxx"}' \
+  --as user \
+  --page-all
+```
+
+---
+
+## 6. 用户操作
+
+### 按姓名/邮箱/手机搜 open_id
+```bash
+lark-cli contact +search-user --query "张三" --as user
+```
+
+### 查用户详情（姓名/部门/邮箱）
+```bash
+lark-cli contact +get-user \
+  --user-id ou_xxx \
+  --user-id-type open_id \
+  --as user \
+  --jq '.data.user | {name,en_name,email,department_ids}'
+```
+
+---
+
+## 7. 日历操作
+
+### 查今日日程
+```bash
+lark-cli calendar +agenda --as user
+```
+
+### 创建日程
+```bash
+lark-cli calendar +event-create \
+  --summary "会议名称" \
+  --start "2026-04-17T10:00:00+08:00" \
+  --end   "2026-04-17T11:00:00+08:00" \
+  --as user
+```
+
+---
+
+## 8. 任务操作
+
+### 查我的任务
+```bash
+lark-cli task +get-my-tasks --as user
+```
+
+### 创建任务
+```bash
+lark-cli task +create \
+  --summary "任务标题" \
+  --due "2026-04-20T18:00:00+08:00" \
+  --as user
+```
+
+---
+
+## 9. 错误处理
+
+返回 `code != 0` 时读 `msg` 字段告知用户，**不静默忽略**：
+```bash
+result=$(lark-cli im +messages-send ... 2>&1)
+code=$(echo "$result" | jq -r '.code // 0')
+if [[ "$code" != "0" ]]; then
+  msg=$(echo "$result" | jq -r '.msg // "未知错误"')
+  echo "Error $code: $msg"
+fi
+```
+
+常见错误码：
+| code | 含义 |
+|------|------|
+| 91402 | bitable/base token 不存在，检查是否用了错误的 token |
+| 99991663 | access token 过期，重新 `lark-cli auth login` |
+| 230002 | 没有操作权限，检查 --as bot/user |
+
+---
+
+## 10. 典型完整流程：知识库文档 → bitable → 发群通知
+
+```bash
+# Step 1: 搜知识库，找到 node_token
+lark-cli wiki +search --query "MLA配置确认表" --as user | jq '.data.items[0]'
+
+# Step 2: 解析 node_token → obj_token（spreadsheet_token）
+NODE_TOKEN="IU9ywLNvEi5WLDkEehAc0alwn5b"
+OBJ_TOKEN=$(lark-cli wiki spaces get_node \
+  --params "{\"token\":\"$NODE_TOKEN\"}" --as user \
+  --jq '.data.node.obj_token')
+
+# Step 3: 看 sheet 列表，找嵌入的 bitable
+lark-cli sheets +info --spreadsheet-token "$OBJ_TOKEN" --as user
+
+# Step 4: 获取 metainfo → 提取 blockToken
+METAINFO=$(lark-cli api GET /open-apis/sheets/v2/spreadsheets/${OBJ_TOKEN}/metainfo --as user)
+BLOCK_TOKEN=$(echo "$METAINFO" | jq -r '.data.sheets[] | select(.title=="目标sheet名") | .blockInfo.blockToken')
+
+# Step 5: 解析 base_token + table_id
+BASE_TOKEN=${BLOCK_TOKEN%_*}
+TABLE_ID=${BLOCK_TOKEN#*_}
+
+# Step 6: 读 bitable 记录
+lark-cli base +record-list \
+  --base-token "$BASE_TOKEN" \
+  --table-id "$TABLE_ID" \
+  --limit 200 --as user
+
+# Step 7: 整理负责人 open_id，构建卡片发群
+CARD=$(python3 -c "
+import json, sys
+card = {
+  'schema': '2.0',
+  'header': {'title': {'tag': 'plain_text', 'content': '通知'}, 'template': 'green'},
+  'body': {'elements': [{'tag': 'markdown', 'content': '<at id=\"ou_aaa\">张三</at> 请处理～'}]}
+}
+print(json.dumps(card))
+")
+lark-cli im +messages-send --chat-id oc_xxx --msg-type interactive --content "$CARD" --as bot
+```
