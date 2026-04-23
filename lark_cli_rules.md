@@ -277,6 +277,20 @@ output = result.stdout.decode()
 
 ---
 
+### 6.5 header icon token 必须用已验证的名称
+
+`header.icon.token` 填了不存在的名字（如 `rocket-outlined`）时，图标静默不显示，不报错，但标题内容也会消失。
+
+**安全做法**：标题里直接用 Unicode emoji（`🚀 标题`），效果等同且不依赖 token 名称。
+
+**div 的 `icon` 字段同样不可靠**，`contacts-outlined` / `calendar-outlined` 等 token 实测也不显示。
+
+统一规则：**所有图标都用 Unicode emoji 写在 lark_md content 里**，不依赖 `icon.token`。
+
+已验证 header icon 可用的 token（仅供参考，其余一律用 emoji 替代）：`warning-outlined` · `arrow-down-outlined`
+
+---
+
 ### 6.3 schema 2.0 不支持 `note` tag
 
 使用 `note` 会报错：`cards of schema V2 no longer support this capability; unsupported tag note`（错误码 200861）
