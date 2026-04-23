@@ -615,35 +615,66 @@ make_noperm_card() {
 ```
 
 ### 发版通知（含 @人）
+
+布局：顶部三列信息栏（版本号/环境/状态）+ 版本负责人 + 活动负责人。
+**图标一律用 Unicode emoji 写在 lark_md content 里，禁止用 `icon.token`**（token 名称不可靠，会静默消失）。
+
 ```bash
 send_deploy_notify() {
   local chat_id="$1" version="$2" env="$3"
   shift 3
-  local at_list=""
-  for open_id in "$@"; do
-    at_list+="<at id=\"${open_id}\">${open_id}</at> "
+  # 剩余参数格式：open_id1 name1 open_id2 name2 ...
+  local at_owners=""
+  while [[ $# -ge 2 ]]; do
+    at_owners+="<at id=\"$1\">$2</at>  "
+    shift 2
   done
-  CARD=$(python3 -c "
-import json, sys
-card = {
-  'schema': '2.0',
-  'header': {'title': {'tag': 'plain_text', 'content': '【${version} ${env}】已发好 🎉'}, 'template': 'wathet'},
-  'body': {'elements': [
-    {'tag': 'div', 'text': {'tag': 'lark_md',
-      'content': '<at id=\"ou_atlas\">王同乐(Atlas)</at> <at id=\"ou_scott\">张超(Scott)</at>\n请知悉～'}},
-    {'tag': 'hr'},
-    {'tag': 'div', 'text': {'tag': 'lark_md',
-      'content': '${at_list}\n麻烦配置活动，辛苦了！'}}
-  ]}
-}
-print(json.dumps(card))
-")
+
+  local now; now=$(date '+%Y-%m-%d %H:%M')
+
+  python3 /tmp/_deploy_card.py "$version" "$env" "$now" "$at_owners" > /tmp/_deploy_card.json
   lark-cli im +messages-send \
     --chat-id "$chat_id" \
     --msg-type interactive \
-    --content "$CARD" \
+    --content "$(cat /tmp/_deploy_card.json)" \
     --as bot
 }
+```
+
+`/tmp/_deploy_card.py`（构建脚本，避免 heredoc 内变量展开问题）：
+
+```python
+import json, sys
+version, env, now, at_owners = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+card = {
+    "schema": "2.0",
+    "config": {"wide_screen_mode": True},
+    "header": {
+        "title": {"tag": "plain_text", "content": f"🚀 {version} · {env} 发版通知"},
+        "template": "wathet",
+        "subtitle": {"tag": "plain_text", "content": f"MLA · {env} · {now}"}
+    },
+    "body": {"elements": [
+        {
+            "tag": "column_set", "flex_mode": "trisect",
+            "columns": [
+                {"tag": "column", "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": f"<font color=grey>版本号</font>\n**{version}**"}}]},
+                {"tag": "column", "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": f"<font color=grey>环境</font>\n<text_tag color='blue'>{env}</text_tag>"}}]},
+                {"tag": "column", "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": "<font color=grey>状态</font>\n<text_tag color='green'>:DONE: 已发好</text_tag>"}}]},
+            ]
+        },
+        {"tag": "hr"},
+        {"tag": "div", "text": {"tag": "lark_md",
+            "content": '👥 **版本负责人知悉**\n<at id="ou_f4d8024b035c78431a9bfdfce82a4cfb">王同乐(Atlas)</at>  <at id="ou_0bf729df814255c9ba18191d077ecfb1">张超(Scott)</at>\n请知悉～'}},
+        {"tag": "hr"},
+        {"tag": "div", "text": {"tag": "lark_md",
+            "content": f"📅 **活动配置请跟进**\n{at_owners}\n麻烦配置活动，辛苦了！:THUMBSUP:"}},
+        {"tag": "hr"},
+        {"tag": "div", "text": {"tag": "lark_md", "content": f"<font color=grey>:PROCESSING: {version} · {env} · 由 Claude Bot 自动发送</font>"}}
+    ]}
+}
+print(json.dumps(card, ensure_ascii=False))
 ```
 
 ### 按钮确认（JSON 2.0）
