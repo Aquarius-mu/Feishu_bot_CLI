@@ -22,6 +22,7 @@ PID_FILE="$BOT_DIR/bot.pid"
 LOG_FILE="$BOT_DIR/bot.log"
 
 CLAUDE_BIN=claude
+CLAUDE_MODEL=claude-sonnet-4-6
 MCP_CONFIG=/data/home/jiadongsun/.claude/mcp.json
 
 SYSTEM_PROMPT="你是一个飞书群助手。每条用户消息开头会携带[系统上下文]，\
@@ -69,6 +70,7 @@ build_warmup_session() {
     output=$($CLAUDE_BIN -p \
       --dangerously-skip-permissions \
       --mcp-config "$MCP_CONFIG" \
+      --model "$CLAUDE_MODEL" \
       --output-format json \
       --system-prompt "$SYSTEM_PROMPT" \
       "." < /dev/null 2>>"$LOG_FILE")
@@ -390,6 +392,7 @@ _new_session() {
   output=$($CLAUDE_BIN -p \
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
+    --model "$CLAUDE_MODEL" \
     --output-format json \
     --system-prompt "$SYSTEM_PROMPT" \
     "." < /dev/null 2>>"$LOG_FILE")
@@ -432,6 +435,7 @@ call_claude() {
   text=$($CLAUDE_BIN -p \
     --dangerously-skip-permissions \
     --mcp-config "$MCP_CONFIG" \
+    --model "$CLAUDE_MODEL" \
     --resume "$session_id" \
     "${question}" \
     < /dev/null 2>>"$LOG_FILE")
@@ -446,6 +450,7 @@ call_claude() {
       text=$($CLAUDE_BIN -p \
         --dangerously-skip-permissions \
         --mcp-config "$MCP_CONFIG" \
+        --model "$CLAUDE_MODEL" \
         --resume "$session_id" \
         "${question}" \
         < /dev/null 2>>"$LOG_FILE")
@@ -620,6 +625,7 @@ ${answer:0:600}
     $CLAUDE_BIN -p \
       --dangerously-skip-permissions \
       --mcp-config "$MCP_CONFIG" \
+      --model "$CLAUDE_MODEL" \
       "$meta_prompt" < /dev/null >> "$SKILL_IMPROVE_LOG" 2>&1
     echo "[$(date '+%H:%M:%S')] skill_improve: done" >> "$SKILL_IMPROVE_LOG"
   ) 200>"$SKILL_IMPROVE_LOCK" &
